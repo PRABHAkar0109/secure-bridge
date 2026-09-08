@@ -1,11 +1,16 @@
-### [bridge] executor transcript for analysis.py — 2026-09-08T17:39:44Z
-Runner: python3 /Users/prabhakaran.v/.copilot/repos/copilot-worktrees/secure-bridge/prabhakar0109-potential-meme/secure-bridge/receiver/runner.py /Users/prabhakaran.v/.copilot/repos/copilot-worktrees/secure-bridge/prabhakar0109-potential-meme/secure-bridge/bridge-inbox/jobs/analysis.py
+mean_blood_pressure_by_age_group load = synthetic (7 rows)
 
---- stdout (stdout.log) ---
+age_group    n   mean_bp
+--------------------------
+40-49        3     118.3
+50-59        2     131.5
+60-69        2     140.0
+
 Wrote: /Users/prabhakaran.v/.copilot/repos/copilot-worktrees/secure-bridge/prabhakar0109-potential-meme/secure-bridge/bridge-outbox/data_report.md
-[runner] done rc=0
 
---- stderr (stderr.log) ---
 
---- exit / outcome ---
-STATUS: SUCCESS (rc reported by runner)
+--- [bridge metadata] ---
+job: analysis.py | runner exit: SUCCESS
+transcript generated: 2026-09-08T17:45:53Z
+stdout(per-run): /Users/prabhakaran.v/.copilot/repos/copilot-worktrees/secure-bridge/prabhakar0109-potential-meme/secure-bridge/bridge-state/analysis.py.run.out
+stderr(per-run): /Users/prabhakaran.v/.copilot/repos/copilot-worktrees/secure-bridge/prabhakar0109-potential-meme/secure-bridge/bridge-state/analysis.py.run.err

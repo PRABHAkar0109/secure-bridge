@@ -64,15 +64,45 @@ process_once() {
     local sigf="$STATE/${base}.sig"
     [[ -n "$sig" ]] && [[ -f "$sigf" ]] && [[ "$sig" == "$(cat "$sigf" 2>/dev/null)" ]] && continue
     log "running: $base"
-    if python3 "$SCRIPT_DIR/runner.py" "$f" >>"$STATE/$base.stdout.log" 2>>"$STATE/$base.stderr.log"; then
+    # Per-run stdout/stderr for the transcript ONLY — the job's output for a
+    # single execution, exactly like a notebook cell renders it (we do NOT use
+    # the accumulating .stdout.log which grows across runs).
+    local runout="$STATE/${base}.run.out"; : > "$runout"
+    local runerr="$STATE/${base}.run.err"; : > "$runerr"
+    if python3 "$SCRIPT_DIR/runner.py" "$f" >>"$runout" 2>>"$runerr"; then
       rm -f "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
       [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"
       log "  - ok: $base"
     else
-      cp "$STATE/$base.stderr.log" "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
+      cp "$runerr" "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
       [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"   # record sig; re-run only on edit
       log "  - FAILED: $base (crash log added to outbox)"
     fi
+    # 2b) assemble the FULL execution transcript: RAW cell output first
+    #     (exactly as Jupyter shows it), then clearly-separated bridge metadata.
+    log "  - writing transcript: $base.transcript.txt"
+    {
+      # ---- RAW CELL OUTPUT (what the notebook displays after execution) ----
+      cat "$runout" 2>/dev/null
+      # stderr appended verbatim too — matches a terminal/notebook merged view
+      # (e.g. a traceback, which the cell shows in red).
+      if [[ -s "$runerr" ]]; then
+        echo ""
+        echo "--- stderr (as shown in the cell) ---"
+        cat "$runerr" 2>/dev/null
+      fi
+      # ---- BRIDGE METADATA (clearly separated from the cell output) ----
+      echo ""
+      echo ""
+      echo "--- [bridge metadata] ---"
+      echo "job: $base | runner exit: $(if [[ -f "$OUTBOX/${base}.crash.txt" ]]; then echo FAILED; else echo SUCCESS; fi)"
+      echo "transcript generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "stdout(per-run): $runout"
+      echo "stderr(per-run): $runerr"
+    } > "$OUTBOX/${base}.transcript.txt"
+    # keep the aggregate history logs too (for server-side debugging)
+    cat "$runout" >> "$STATE/$base.stdout.log" 2>/dev/null || true
+    cat "$runerr" >> "$STATE/$base.stderr.log" 2>/dev/null || true
     handled=1
   done
 

@@ -38,5 +38,6 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
-    print(f"[runner] done rc={rc}")
+    # Keep stdout 100% job-owned on success: emit NOTHING to stderr. A running
+    # cell's output is exactly the job's prints. Errors never reach stdout.
     sys.exit(0 if rc is None or rc == 0 else 1)

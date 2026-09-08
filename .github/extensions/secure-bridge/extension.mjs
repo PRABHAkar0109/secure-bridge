@@ -444,6 +444,14 @@ async function surfaceTranscript(name) {
     }
     // 2) record it so the agent can surface it in the next assistant turn.
     recentNewResults.push({ name, content, at: Date.now() });
+    // 3) inject a user-turn message into THIS chat with the raw cell output.
+    //    session.send is proven to work on a live session — it delivers
+    //    ASYNCHRONOUSLY (the message arrives after the current turn finishes).
+    await joined.send(
+      `📥 [secure-bridge] New execution result returned for \`${name}\`:\n` +
+      `The inside job finished and its raw cell output (exactly as shown in the notebook) is below.\n\n` +
+      "```\n" + content + "\n```"
+    );
     joined.log(`[auto-notify] new result surfaced: ${name}`);
   } catch (e) {
     joined.log(`[auto-notify] failed for ${name}: ${e.message}`);

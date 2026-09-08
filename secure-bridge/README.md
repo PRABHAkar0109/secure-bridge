@@ -141,10 +141,16 @@ variant).
 - **Raw PHI must never be logged** to stdout/stderr by jobs (it would flow to
   the outbox logs). Use aggregate values (counts, means, tables without
   identifiers) and write detailed content only to `bridge-outbox/`.
-- The `phi_scan.py` gate is a best-effort pattern check for common IDs. It is
-  **not** a certified DLP/IRM replacement — run an organization-approved
-  scan/de-identification if your compliance requires it before enabling
-  outbound pushes.
+- **The `phi_scan.py` gate is now a policy-driven DLP layer**: versioned
+  `receiver/phi_policy.json`, fail-closed blocking (MRN/SSN/DOB/phone/email/
+  insurance/token/secret/notebook patterns), **quarantine** of blocked files
+  under `bridge-state/quarantine/`, and a **PHI-free audit log**
+  (`bridge-state/phi-audit.jsonl`). Self-tests: `phi_scan.py --self-test` and
+  `receiver/phi_scan_test.py`.
+- **It is still not a certified DLP/IRM replacement.** Read `COMPLIANCE.md`:
+  certification (HIPAA/SOC2/HITRUST) requires an external audit, vendor DLP,
+  de-identification, encryption, IAM, and BAAs — this repo provides auditable
+  technical controls + evidence trail, not the certification itself.
 - Anyone with push rights to this repo could push code that the listener will
   execute on the PHI server. **Protect push access.** For team-wide exposure,
   strongly prefer a dedicated, access-restricted repo with branch protection
@@ -154,6 +160,13 @@ variant).
 | File | Default | Action required |
 |------|---------|-----------------|
 | `sender/.env.example` | `GIT_PUSH_TOKEN` placeholder | Fill with your fine-grained, read/write, repo-limited PAT; never commit the real one |
+
+### Quick security verification
+```bash
+# prove the gate detects PHI and stays clean on aggregates
+python3 secure-bridge/receiver/phi_scan.py --self-test
+python3 secure-bridge/receiver/phi_scan_test.py
+```
 
 ---
 

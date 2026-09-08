@@ -1,0 +1,117 @@
+{
+  "policy_id": "sb-dlp-v1",
+  "version": 1,
+  "description": "Secure Bridge outbound PHI/secret DLP policy.",
+  "policy_owner": "replace-with-security-owner@example.com",
+  "last_reviewed": "2026-09-08",
+  "fail_closed": true,
+  "quarantine": true,
+  "audit_log": "secure-bridge/bridge-state/phi-audit.jsonl",
+  "max_context_length": 16,
+  "severity_threshold": "warning",
+  "redact": true,
+  "identifier_classes": {
+    "MRN": {
+      "patterns": [
+        "\\bMRN\\s*[=:#. ]+\\d{5,12}",
+        "\\b(?:patient|encounter|medical)\\s+(?:record\\s+)?(?:number|no|id)\\s*[=:#. ]+\\d{5,12}"
+      ],
+      "severity": "block",
+      "label": "Medical Record Number"
+    },
+    "SSN": {
+      "patterns": ["\\b\\d{3}-\\d{2}-\\d{4}\\b"],
+      "severity": "block",
+      "label": "Social Security Number"
+    },
+    "DOB": {
+      "patterns": [
+        "\\b(?:19|20)\\d{2}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b",
+        "\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{4}\\b"
+      ],
+      "severity": "block",
+      "label": "Date of Birth"
+    },
+    "PHONE": {
+      "patterns": [
+        "\\b\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]\\d{4}\\b",
+        "\\b\\+?1?\\s?\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b"
+      ],
+      "severity": "block",
+      "label": "Phone Number"
+    },
+    "EMAIL": {
+      "patterns": ["[\\w.+-]+@[\\w-]+\\.[A-Za-z]{2,}"],
+      "severity": "block",
+      "label": "Email Address"
+    },
+    "NAME": {
+      "patterns": [
+        "\\b(?:Mr\\.?|Mrs\\.?|Ms\\.?|Dr\\.?|Miss|Prof\\.?)\\s+[A-Z][a-z]+(?:\\s+[A-Z][a-zA-Z]*){0,2}",
+        "\\b(?:patient|subject)\\s+(?:name|is)\\s*[:=]?\\s+[A-Z][a-z]+\\s+[A-Z][a-zA-Z-]+"
+      ],
+      "severity": "warning",
+      "label": "Person Name (heuristic)"
+    },
+    "POSTAL": {
+      "patterns": ["\\b\\d{5}(?:[- ]?\\d{4})?\\b"],
+      "severity": "warning",
+      "label": "US ZIP / Postal"
+    },
+    "ADDRESS": {
+      "patterns": [
+        "\\b\\d{1,5}\\s+[A-Z][a-zA-Z]+\\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Place|Pl)\\b"
+      ],
+      "severity": "warning",
+      "label": "Street Address"
+    },
+    "INSURANCE": {
+      "patterns": [
+        "\\b(?:member|policy|insurance|claim)\\s+(?:id|no|number|#)\\s*[:=#. ]+[A-Z0-9]{6,}",
+        "\\b[ABHJLNMPRSVWY][A-Z]{2}\\d{1,9}\\b"
+      ],
+      "severity": "block",
+      "label": "Insurance / Member ID"
+    },
+    "LICENSE": {
+      "patterns": ["\\b[A-Z]{2,3}\\s*\\d{2,7}\\b"],
+      "severity": "warning",
+      "label": "License plate (heuristic)"
+    },
+    "UUID": {
+      "patterns": ["\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b"],
+      "severity": "warning",
+      "label": "UUID (may be an identifier)"
+    },
+    "GITHUB_TOKEN": {
+      "patterns": ["\\bgh[pousr]_[A-Za-z0-9]{36,}\\b"],
+      "severity": "block",
+      "label": "GitHub Token"
+    },
+    "SECRET": {
+      "patterns": [
+        "\\b(?:sk-|xoxb-|AKIA|eyJ)[A-Za-z0-9_-]{10,}\\b",
+        "\\b(?:password|passwd|secret|token|api[_-]?key)\\s*[=:]\\s*\\S+"
+      ],
+      "severity": "block",
+      "label": "Secret / Token"
+    }
+  },
+  "context_rules": [
+    {
+      "name": "phi_entity_column",
+      "match": "\\b(?:name|mrn|ssn|dob|birth_date|patient_id|ssn|emrno)\\s*"
+    }
+  ],
+  "allowed_extensions": {
+    ".png": ["image"],
+    ".jpg": ["image"],
+    ".jpeg": ["image"],
+    ".pdf": ["document"],
+    ".md": ["text"],
+    ".txt": ["text"],
+    ".log": ["text"],
+    ".csv": ["agg-only"]
+  },
+  "notes": "WARNING: best-effort pattern DLP layer + audit + quarantine. This is a technical control that certification audits require, NOT a certified DLP/IRM or a substitute for HIPAA/SOC2/HITRUST attestation, signed BAAs, encryption, or org-approved de-identification."
+}

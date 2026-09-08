@@ -13,6 +13,8 @@
 *.feather
 *.json
 *.jsonl
+# but security CONFIG (DLP policy) is not data — it must be version-controlled:
+!secure-bridge/receiver/phi_policy.json
 
 # Notebooks & rendered/pickled outputs silently embed PHI
 *.ipynb

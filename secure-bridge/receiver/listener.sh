@@ -44,6 +44,13 @@ done
 
 log() { printf '%s %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z)" "$*" | tee -a "$LOG"; }
 
+# ---- startup self-test of the DLP gate (auditable correctness) ----
+if ! "$SCRIPT_DIR/phi_scan.py" --self-test >/dev/null 2>&1; then
+  log "FATAL: PHI scanner self-test FAILED; refusing to start listener"
+  exit 1
+fi
+log "PHI scanner self-test: PASS"
+
 # ---- one full pass: pull -> run new jobs -> capture logs -> push outbox ----
 process_once() {
   log "=== pass start ==="

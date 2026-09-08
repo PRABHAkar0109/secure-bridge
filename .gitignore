@@ -1,0 +1,7 @@
+*.ipynb_checkpoints/
+
+# secure-bridge local-only state
+secure-bridge/bridge-state/
+
+# sender secrets
+secure-bridge/sender/.env

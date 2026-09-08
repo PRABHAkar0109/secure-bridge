@@ -35,10 +35,14 @@ secure-bridge/
     └── wake_on_git.py      <- (off by default) git-change-triggered loop
 ```
 
-> **Interactive control panel (Copilot extension):** this repo ships a project
-> Copilot extension at `.github/extensions/secure-bridge/` — an interactive
-> dashboard (list inbox / outbox, run PHI scan, read reports, send jobs) plus
-> agent tools like `secure_bridge_send_job`. See `.github/extensions/secure-bridge/`.
+> **Interactive control panel + auto-show (Copilot extension):** this repo
+> ships a project Copilot extension at `.github/extensions/secure-bridge/` —
+> an interactive dashboard (list inbox / outbox, run PHI scan, read reports,
+> send jobs), agent tools like `secure_bridge_send_job`, and an **auto-notify
+> watcher** that delivers each new inside execution result (`*.transcript.txt`)
+> straight into your chat as a `📥 [secure-bridge]` message with the raw
+> notebook-style cell output. See `.github/extensions/secure-bridge/` and
+> `SOP.md §4.5`.
 
 
 On first run the receiver creates its working subfolders **inside its own

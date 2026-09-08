@@ -45,15 +45,20 @@ Or, the SOP equivalent for this bridge:
    the secure, live environment.
 4. The job writes safe results only to `secure-bridge/bridge-outbox/`.
 
-## 3. Review
+## 3. Review — two displays, raw + summarized
 
 Inside, the listener runs `receiver/phi_scan.py` over the outbox. Only files
 that pass the scan are pushed back. On your machine, `autosync.sh` pulls them,
 and you see the results in Cursor:
 
-- **Table / report** → `bridge-outbox/data_report.md` (rendered)
+- **Raw cell output** → `bridge-outbox/<jobname>.transcript.txt` (the exact
+  stdout the notebook showed — plain table, like an `Out[n]` frame)
+- **Table / report** → `bridge-outbox/data_report.md` (rendered pretty)
 - **Chart** → `bridge-outbox/chart.png` (inline preview)
 - **Anything else** → `bridge-outbox/<jobname>.crash.txt` (see below)
+
+If the Secure Bridge extension is loaded, the raw output also arrives
+**automatically in chat** — see §4.5.
 
 ## 4. Fix — the auto re-run loop
 
@@ -72,6 +77,38 @@ the secure box stays headless.
 
 ---
 
+## 4.5 Auto-show raw results — they arrive in chat, no asking
+
+Every time the listener finishes a job it writes a **transcript of the exact
+cell output** to the outbox:
+
+- **`bridge-outbox/<jobname>.transcript.txt`** — the raw stdout of a single
+  execution, byte-for-byte what the notebook cell shows (plain text, no
+  markdown, no metadata up front). Bridge metadata is boxed below a
+  `--- [bridge metadata] ---` line. This is **Display A** (what actually
+  printed inside).
+
+- **`bridge-outbox/data_report.md` / `chart.png`** — the pretty aggregated
+  artifacts. This is **Display B** (what the AI summarizes for you).
+
+The Secure Bridge Copilot extension watches the outbox and, the moment a new
+`*.transcript.txt` lands, **delivers it into your chat automatically** as a
+`📥 [secure-bridge]` message showing the raw cell output — plus pushes a live
+update to the Secure Bridge dashboard and queues `pendingResults` on
+`secure_bridge_status` as a fallback.
+
+So the workflow is:
+
+1. You ask (natural language): *"load patients, mean BP by age, chart it."*
+2. The AI writes + pushes `analysis.py`; the inside listener runs it.
+3. **Raw output arrives in your chat on its own** (`📥 ...`): the exact table
+   the notebook printed.
+4. The AI additionally gives you the concise summary / pretty chart.
+
+No polling, no "check if it's done" — the result comes to you.
+
+---
+
 ## 5. Guardrails that make this safe (don't "fix" these away)
 
 - **Repo `.gitignore`**: raw data (`*.csv/xlsx/json/parquet...`, notebooks,
@@ -82,6 +119,10 @@ the secure box stays headless.
   address/phone/secret patterns before any push out.
 - **Only `bridge-outbox/` crosses back out.** Job stdout/stderr stays in
   local `bridge-state/` logs on the server.
+- **Transcripts are PHI-scanned too.** `*.transcript.txt` (the raw cell
+  output) rides the same outbound gate as everything else — raw identifiers
+  in job output block the push, keeping the "clarity" feature from becoming a
+  leak.
 - **Inbox = execution sandbox.** Anyone with push rights can run code on the
   PHI server. Protect push access to the repo. (See also `wake_on_git.py` for
   a branch-review variant.)

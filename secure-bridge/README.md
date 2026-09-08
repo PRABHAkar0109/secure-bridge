@@ -21,10 +21,12 @@ on the secure server pull + execute them against live health records — pushing
 ```
 secure-bridge/
 ├── README.md               <- this file
+├── SOP.md                  <- standard operating procedure (write→run→review→fix)
 ├── template/
 │   └── job_template.py     <- your "blank job" for the AI to fill
 ├── sender/
-│   ├── push_job.sh         <- run on YOUR machine (outside) to send a job
+│   ├── autosync.sh         <- run on YOUR machine (outside); background 2-way loop
+│   ├── push_job.sh         <- run on YOUR machine (outside) to send a job once
 │   └── .env.example        <- PAT/remote template (NEVER commit real token)
 └── receiver/
     ├── listener.sh         <- run on the SECURE server (inside); pull+run+push
@@ -85,7 +87,10 @@ alive, and keep going with a `--interval` loop (default 20s) for live inbound.
 ### B. On your machine (outside)
 
 ```bash
-chmod +x secure-bridge/sender/push_job.sh
+chmod +x secure-bridge/sender/*.sh
+# the background two-way loop (preferred — this is the "autosync" step):
+bash secure-bridge/sender/autosync.sh
+# or send a job once:
 ./secure-bridge/sender/push_job.sh myjob.py   # whole local file only
 ```
 

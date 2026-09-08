@@ -1,4 +1,32 @@
-*.ipynb_checkpoints/
+# ============================================================================
+# Repo-side guardrail for secure-bridge (backs up receiver/phi_scan.py).
+# Raw / renderable PHI data is DENIED by default anywhere in this repo —
+# EXCEPT under secure-bridge/bridge-outbox/, where only scanned, aggregated
+# results are allowed to land (that folder is the only thing pushed back).
+# ============================================================================
+
+# Raw / semi-structured data (patient files, dumps, exports)
+*.csv
+*.xlsx
+*.xlsm
+*.parquet
+*.feather
+*.json
+*.jsonl
+
+# Notebooks & rendered/pickled outputs silently embed PHI
+*.ipynb
+.ipynb_checkpoints/
+*.html
+*.pkl
+*.joblib
+*.pickle
+*.pyc
+__pycache__/
+
+# Un-ignore only scanned OUTPUT: anything under bridge-outbox/ went through
+# receiver/phi_scan.py before the listener is allowed to git add it.
+!secure-bridge/bridge-outbox/**
 
 # secure-bridge local-only state
 secure-bridge/bridge-state/

@@ -53,20 +53,24 @@ process_once() {
   git pull --ff-only "$REMOTE" "$BRANCH" >/dev/null 2>&1 || \
     log "WARN: git pull failed (will retry on next loop)"
 
-  # 2) run any NEW .py jobs (skip already-done ones via state/processed file)
+  # 2) run any NEW or CHANGED .py jobs. Signature check lets an edit in
+  #    Cursor (a "fix" to analysis.py) auto re-run it on the next loop; a
+  #    crash log is written to the outbox every failure so you can read it.
   local handled=0
   for f in "$INBOX"/*.py; do
     [[ -f "$f" ]] || continue
     local base; base="$(basename "$f")"
-    local donef="$STATE/${base}.done"
-    [[ -f "$donef" ]] && continue
+    local sig; sig="$(md5sum "$f" 2>/dev/null | cut -d' ' -f1)"
+    local sigf="$STATE/${base}.sig"
+    [[ -n "$sig" ]] && [[ -f "$sigf" ]] && [[ "$sig" == "$(cat "$sigf" 2>/dev/null)" ]] && continue
     log "running: $base"
     if python3 "$SCRIPT_DIR/runner.py" "$f" >>"$STATE/$base.stdout.log" 2>>"$STATE/$base.stderr.log"; then
-      touch "$donef"
+      rm -f "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
+      [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"
       log "  - ok: $base"
     else
       cp "$STATE/$base.stderr.log" "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
-      touch "$donef"   # prevent infinite re-run; crash log is outbound
+      [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"   # record sig; re-run only on edit
       log "  - FAILED: $base (crash log added to outbox)"
     fi
     handled=1

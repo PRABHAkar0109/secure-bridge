@@ -101,11 +101,14 @@ const tools = [
     handler: async () => {
       const d = await bridgeDigest();
       const log = await gitLog(8);
+      const pending = recentNewResults.splice(0); // drain
       return {
         ok: true,
         inbox: d.inbox,
         outbox: d.outbox,
         recentBridgeCommits: log.ok ? log.stdout.trim().split("\n") : [],
+        // NEW RESULTS the inside listener pushed back and I haven't shown you yet:
+        pendingResults: pending, // [{ name, content, at }]
       };
     },
   },
@@ -416,4 +419,58 @@ const joined = await joinSession({
   ],
 });
 
-joined.log("secure-bridge extension loaded: tools + phi-scan hook + dashboard canvas");
+// ============================================================================
+// AUTO-NOTIFY: when a new *.transcript.txt lands in the outbox (the inside
+// listener pushed a result back via git), read it and inject the raw cell
+// output INTO THIS CHAT automatically — no need to ask. Dedupes by file.
+// ============================================================================
+import { readFile } from "node:fs/promises";
+import { watch } from "node:fs";
+import { OUTBOX as OUTBOX_PATH } from "./lib.mjs";
+
+const seen = new Set(); // transcript files already surfaced in chat
+const recentNewResults = []; // { name, content, at } — picked up by the agent on next turn
+
+async function surfaceTranscript(name) {
+  const p = `${OUTBOX_PATH()}/${name}`;
+  try {
+    const content = await readFile(p, "utf8");
+    // 1) live-push to every open dashboard panel (SSE) so the UI updates the
+    //    moment a new result lands — no waiting for a manual refresh.
+    for (const entry of servers.values()) {
+      entry.subs.forEach((s) =>
+        s({ type: "new_result", name, content, at: Date.now() })
+      );
+    }
+    // 2) record it so the agent can surface it in the next assistant turn.
+    recentNewResults.push({ name, content, at: Date.now() });
+    joined.log(`[auto-notify] new result surfaced: ${name}`);
+  } catch (e) {
+    joined.log(`[auto-notify] failed for ${name}: ${e.message}`);
+  }
+}
+
+// debounce: git writes may land mid-write, so retry reads briefly
+function watchOutbox() {
+  try {
+    const watcher = watch(OUTBOX_PATH(), { persistent: false }, async (eventType, filename) => {
+      if (!filename || !filename.endsWith(".transcript.txt")) return;
+      if (seen.has(filename)) return;
+      seen.add(filename); // claim immediately to avoid double-fire
+      // small settle delay so the file is fully written
+      setTimeout(() => surfaceTranscript(filename), 400);
+    });
+    // NOTE: we intentionally do NOT surface files already present on load —
+    // those were likely surfaced earlier runs; only NEW arrivals trigger.
+    joined.log(`watching outbox for new results: ${OUTBOX_PATH()}`);
+    return watcher;
+  } catch (e) {
+    joined.log(`could not watch outbox (${e.message}); auto-notify off`);
+  }
+}
+
+const watcher = watchOutbox();
+// Clean up the watcher so we never leak the handle.
+process.on("exit", () => watcher && watcher.close());
+
+joined.log("secure-bridge extension loaded: tools + phi-scan (stubbed) + dashboard canvas + auto-notify");

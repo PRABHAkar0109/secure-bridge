@@ -24,7 +24,7 @@ STATE="$BRIDGE/bridge-state"
 LOG="$STATE/bridge.log"
 POLL=20
 REMOTE="${REMOTE:-origin}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-$(git -C "$REPO_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || echo main)}"
 MODE="loop"
 STAMP="$(date +%s)"   # one marker per process; not persisted
 

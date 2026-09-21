@@ -144,6 +144,62 @@ encryption, IAM, and signed BAAs — outside the scope of this pipeline.
 
 ---
 
+## Running TWO projects at once (or more)
+
+The pipeline is isolated by **branch + clone**. You can run two (or several)
+independent projects simultaneously without them ever mixing.
+
+**The rule:** each project on your machine gets its own folder (clone) **and**
+its own branch in the shared repo; the internal side keeps a matching
+clone + branch. Both scripts automatically use the branch they are checked
+out on, so there is nothing to configure per project.
+
+### EXTERNAL — your machine (two projects)
+
+```bash
+# Project A — clone once from the shared repo
+git clone <shared-repo-url> my_project_A
+cd my_project_A
+git checkout -b project_a
+cp secure-bridge/sender/.env.example secure-bridge/sender/.env
+# start A's background loop (leave this terminal open)
+bash secure-bridge/sender/autosync.sh
+
+# Project B — clone a SECOND time into a different folder, different branch
+git clone <shared-repo-url> my_project_B
+cd my_project_B
+git checkout -b project_b
+cp secure-bridge/sender/.env.example secure-bridge/sender/.env
+# start B's loop in its own terminal
+bash secure-bridge/sender/autosync.sh
+```
+
+### INTERNAL — the secure workspace (matching clones/branches)
+
+On the secure server, create two clones of the shared repo, check each out on
+the matching branch, and start one listener per project:
+
+```bash
+# inside the shared work area:
+git clone <shared-repo-url> project_A_clone && cd project_A_clone && git checkout -b project_a
+./secure-bridge/receiver/listener.sh --daemon     # keep A alive
+
+git clone <shared-repo-url> project_B_clone && cd project_B_clone && git checkout -b project_b
+./secure-bridge/receiver/listener.sh --daemon     # keep B alive
+```
+
+Each pair (external clone/branch + internal clone/branch) now forms an
+independent tunnel:
+- A job pushed from `my_project_A` on branch `project_a` is picked up **only**
+  by A's internal listener and its results return to A.
+- Nothing crosses between A and B — different folders, different branches.
+
+> Not sure if it's worth running them in parallel? Simpler alternative: run
+> them one after another on the **same** clone/branch — same commands, one
+> pipeline at a time.
+
+---
+
 ## Operation
 
 - **Send a job:** `push_job.sh jobs/roadsafety/clean_census.py`

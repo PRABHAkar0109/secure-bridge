@@ -26,7 +26,7 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
   set -a; source "$SCRIPT_DIR/.env"; set +a
 fi
 REMOTE="${REMOTE:-${GIT_REMOTE:-origin}}"
-BRANCH="${BRANCH:-${GIT_BRANCH:-main}}"
+BRANCH="${BRANCH:-${GIT_BRANCH:-$(git -C "$REPO_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || echo main)}}"
 POLL=5
 FAILED_PUSHES=0
 MAX_FAILED_PUSHES=10

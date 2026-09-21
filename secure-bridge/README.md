@@ -3,19 +3,39 @@
 A lightweight, headless pipeline: you author **plain Python scripts** outside a
 locked-down, PHI-protected environment (with any AI assistant or harness),
 push them to a shared repo, and a listener on the secure server pulls +
-executes them against the live data — pushing **only scanned, aggregated
-outputs** back out.
+executes them against the live data.
+
+**What crosses back is intentionally minimal — schema and errors, not values:**
+- **Outward (internal → you):** a **data skeleton** (`data_schema.md` — file
+  path, row counts, column/field names, dtypes) and **error logs**
+  (`<job>.error.txt` — tracebacks), both PHI-scanned.
+- **Stays internal:** the actual analysis values/results/charts. You see them
+  on the server; raw data and results never leak outward.
 
 > **The two rules that keep this compliant:**
 > - **In-bound** — only plain `.py` code crosses in. Never notebooks: notebooks
 >   silently embed rendered PHI (dataframes, tracebacks, plots) in hidden
 >   metadata.
-> - **Out-bound** — only files under `bridge-outbox/` cross back out, and only
->   after passing `receiver/phi_scan.py`, which blocks raw identifiers
->   (MRN/SSN/DOB/phone/email/name/address/secret patterns). Raw data never
->   leaves the server.
+> - **Out-bound** — only `data_schema.md` + `*.error.txt` under
+>   `bridge-outbox/` cross back out, and only after passing
+>   `receiver/phi_scan.py`, which blocks raw identifiers
+>   (MRN/SSN/DOB/phone/email/name/address/secret patterns). Analysis values
+>   never leave the server.
 
 ---
+
+## Workflow (schema-first)
+
+1. **Phase 0 — see the data first.** Send a probe job that reads your CSV/JSON
+   on the server and writes **only its skeleton** to `OUTBOX/data_schema.md`
+   (columns/field names, row counts, dtypes, source path). You receive it
+   automatically.
+2. **Phase 1 — push the real analysis.** Based on the schema, push your
+   analysis code. It computes inside the secure workspace. If it raises an
+   error, the full traceback returns to you in `<job>.error.txt` to fix.
+3. **Results stay inside** — view charts/tables on the server, or have the
+   analysis itself write only aggregates to the outbox if you opt in; by
+   default the listener only returns schema + errors.
 
 ## Layout
 

@@ -69,7 +69,7 @@ new_jobs() {
 }
 
 # ============================================================================
-# run_job: execute one job, write outbox transcript + crash log, record marker
+# run_job: execute one job; push back ONLY schema + errors, never data values
 # ============================================================================
 run_job() {
   local f="$1" base sig sigf runout runerr rc
@@ -84,28 +84,16 @@ run_job() {
   rc=$?
 
   if [[ $rc -eq 0 ]]; then
-    rm -f "$OUTBOX/${base}.crash.txt"
+    rm -f "$OUTBOX/${base}.error.txt"
     [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"
     log "  - ok: $base"
   else
-    # copy stderr (the traceback) back to the outbox as a crash log
-    cp "$runerr" "$OUTBOX/${base}.crash.txt" 2>/dev/null || true
+    # propagate the error/traceback to the external side (always allowed)
+    { echo "ERROR running $base (exit $rc):"; echo; cat "$runerr"; } \
+      > "$OUTBOX/${base}.error.txt" 2>/dev/null || true
     [[ -n "$sig" ]] && printf '%s' "$sig" >"$sigf"
-    log "  - FAILED: $base (crash log in outbox)"
+    log "  - FAILED: $base (error log in outbox)"
   fi
-
-  # full execution transcript: raw output first, bridge metadata below it
-  {
-    cat "$runout"
-    if [[ -s "$runerr" ]]; then
-      echo ""
-      echo "--- stderr ---"
-      cat "$runerr"
-    fi
-    echo ""
-    echo "--- [bridge metadata] ---"
-    echo "job: $base | exit: $rc | time (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  } > "$OUTBOX/${base}.transcript.txt"
 
   # keep server-side history logs (never pushed)
   cat "$runout" >> "$STATE/$base.stdout.log" 2>/dev/null || true

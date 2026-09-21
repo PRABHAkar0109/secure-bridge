@@ -1,18 +1,19 @@
 # Secure Bridge · Git-based "code in / results out" for protected workspaces
 
-A headless, terminal-based Git loop that lets you author **plain Python
-scripts** outside a locked-down, PHI-protected Jupyter environment (e.g. with
-an AI assistant like Cursor), push them to a shared repo, and have a listener
-on the secure server pull + execute them against live health records — pushing
-**only safe, summarized outputs** back out.
+A lightweight, headless pipeline: you author **plain Python scripts** outside a
+locked-down, PHI-protected environment (with any AI assistant or harness),
+push them to a shared repo, and a listener on the secure server pulls +
+executes them against the live data — pushing **only scanned, aggregated
+outputs** back out.
 
-> **The rule that keeps you compliant:**
-> - **In-bound** — only plain `.py` code crosses in. **No notebooks, ever**:
->   notebooks silently embed rendered PHI (dataframes, error traces, plots) in
->   hidden metadata.
-> - **Out-bound** — only files written under `bridge-outbox/` are pushed back,
->   passed through a PHI-scanner that blocks raw identifiers
->   (MRN/SSN/DOB/name/address patterns). Raw data never leaves the server.
+> **The two rules that keep this compliant:**
+> - **In-bound** — only plain `.py` code crosses in. Never notebooks: notebooks
+>   silently embed rendered PHI (dataframes, tracebacks, plots) in hidden
+>   metadata.
+> - **Out-bound** — only files under `bridge-outbox/` cross back out, and only
+>   after passing `receiver/phi_scan.py`, which blocks raw identifiers
+>   (MRN/SSN/DOB/phone/email/name/address/secret patterns). Raw data never
+>   leaves the server.
 
 ---
 
@@ -20,162 +21,149 @@ on the secure server pull + execute them against live health records — pushing
 
 ```
 secure-bridge/
-├── README.md               <- this file
-├── SOP.md                  <- standard operating procedure (write→run→review→fix)
+├── README.md               <- this file (setup + operation)
 ├── template/
-│   └── job_template.py     <- your "blank job" for the AI to fill
-├── sender/
-│   ├── autosync.sh         <- run on YOUR machine (outside); background 2-way loop
-│   ├── push_job.sh         <- run on YOUR machine (outside) to send a job once
-│   └── .env.example        <- PAT/remote template (NEVER commit real token)
-└── receiver/
-    ├── listener.sh         <- run on the SECURE server (inside); pull+run+push
+│   └── job_template.py     <- your "blank job" to fill in
+├── sender/                 <- EXTERNAL workspace (your machine / any harness)
+│   ├── push_job.sh         <- send one job
+│   ├── autosync.sh         <- background two-way loop (pull results, push jobs)
+│   └── .env.example        <- remote/branch/credentials template (never commit)
+└── receiver/               <- INTERNAL workspace (the secure server)
+    ├── listener.sh         <- pull + run + push loop (the engine)
     ├── runner.py           <- executes a job, captures stdout/stderr
-    ├── phi_scan.py         <- PHI/secret scanner gate for outbound files
-    └── wake_on_git.py      <- (off by default) git-change-triggered loop
+    └── phi_scan.py         <- PHI/secret gate for anything leaving the server
 ```
 
-> **Interactive control panel + auto-show (Copilot extension):** this repo
-> ships a project Copilot extension at `.github/extensions/secure-bridge/` —
-> an interactive dashboard (list inbox / outbox, run PHI scan, read reports,
-> send jobs), agent tools like `secure_bridge_send_job`, and an **auto-notify
-> watcher** that delivers each new inside execution result (`*.transcript.txt`)
-> straight into your chat as a `📥 [secure-bridge]` message with the raw
-> notebook-style cell output. See `.github/extensions/secure-bridge/` and
-> `SOP.md §4.5`.
-
-
-On first run the receiver creates its working subfolders **inside its own
-clone only**:
+The listener creates its working folders **inside its own clone only**:
 
 ```
-RFIs_and_Projects_Compendium/
+<your secure workspace clone>/
 └── secure-bridge/
-    ├── bridge-inbox/jobs/  <- where you drop new job .py files (pushed in)
-    ├── bridge-outbox/      <- where safe results are written (pushed back)
-    └── bridge-state/       <- local run state (logs, since-markers; NOT pushed)
+    ├── bridge-inbox/jobs/  <- where job .py files land (pushed in)
+    ├── bridge-outbox/      <- safe results are written here (pushed back)
+    └── bridge-state/       <- logs + markers (local only, never pushed)
 ```
-No other folder in your shared directory is ever touched.
+
+No other folder in the shared workspace is ever touched.
 
 ---
 
 ## How it works
 
-1. **You (outside)** ask your AI to fill `template/job_template.py` and save
-   it to `secure-bridge/bridge-inbox/jobs/<jobname>.py` (on your machine).
-2. You run `sender/push_job.sh <jobname>.py` → it stages **only** that file
-   and `git push`es it.
-3. Inside your clone, the listener runs: it `git pull`s and looks for new
-   files in `bridge-inbox/jobs/`.
-4. `receiver/runner.py` executes each new job's `run_main()` with the live
-   environment; the job may write results **only** into `bridge-outbox/`.
-5. Anything in `bridge-outbox/` is scanned by `receiver/phi_scan.py`
-   (MRN/SSN/DOB/name/address/secret patterns). Only passing files get
-   `git add`ed and pushed back.
-6. **You (outside)** `git pull` and review aggregated tables/charts + crash
-   logs in Cursor. PHI stays inside.
+```
+  YOUR WORKSPACE (external)          git          SECURE WORKSPACE (internal)
+ ┌──────────────────────────┐     ┌─────────┐     ┌─────────────────────────┐
+ │ author job_template.py   │ ──► │         │ ──► │ listener pulls job      │
+ │ push_job.sh / autosync   │     │ shared  │     │ runner executes it      │
+ │                          │ ◄── │  repo   │ ◄── │ job writes bridge-outbox│
+ │ review reports/charts    │     │         │     │ phi_scan gates the push │
+ └──────────────────────────┘     └─────────┘     └─────────────────────────┘
+```
+
+1. **You (external)** fill `template/job_template.py` and save it to
+   `secure-bridge/bridge-inbox/jobs/<jobname>.py` in your clone.
+2. `sender/push_job.sh` stages **only** that file and pushes it (or
+   `autosync.sh` does this automatically).
+3. **Inside**, `receiver/listener.sh` pulls and runs each new/changed job with
+   `runner.py` in the live environment; the job writes results **only** into
+   `bridge-outbox/`.
+4. Everything in `bridge-outbox/` is PHI-scanned by `phi_scan.py`; only passing
+   files are committed and pushed back.
+5. **You (external)** `git pull` (or autosync does) and review the transcript,
+   tables/charts, and crash logs. PHI stays inside.
+
+`bridge-outbox/` receives three kinds of file per job:
+- `<jobname>.transcript.txt` — exact stdout of the run (plus bridge metadata)
+- `<jobname>.crash.txt` on failure — the traceback, so you can fix it
+- your report/chart artifacts (`summary.md`, `chart.png`, …) — write these from
+  the job into `bridge-outbox/`
+
+**Fix loop:** a crash log comes back → edit the job → the listener detects the
+content change (checksum marker) and **auto re-runs it** on the next pass. No
+manual steps on the server screen.
 
 ---
 
 ## Setup
 
-### A. On the secure server (inside)
+### INTERNAL workspace — the secure server (one-time)
 
 ```bash
-cd /shared/team-folder/RFIs_and_Projects_Compendium   # your clone
-# make the receiver executable
+cd <your clone in the secure workspace>
 chmod +x secure-bridge/receiver/*.sh secure-bridge/receiver/*.py
-# run the listener in the background (keep this terminal open, or use nohup):
+
+# run the listener in the background (survives terminal close):
 ./secure-bridge/receiver/listener.sh --daemon
+# or run one pass to verify the wiring:
+./secure-bridge/receiver/listener.sh --once
 ```
 
-`--daemon` runs `listener.sh` with `nohup` so it keeps going if you close the
-terminal. **Note:** background gates may be reset when the server/session
-restarts — schedule `listener.sh --once` via cron or a login hook to keep it
-alive, and keep going with a `--interval` loop (default 20s) for live inbound.
+`--daemon` re-launches itself with `nohup`. On server/session restart the
+daemon is gone — re-run it, or schedule `listener.sh --once` on a cron/login
+hook to re-keep it alive. The default loop polls every 20s.
 
-### B. On your machine (outside)
+### EXTERNAL workspace — your machine (one-time)
 
 ```bash
+cp secure-bridge/sender/.env.example secure-bridge/sender/.env
+#   edit .env: GIT_REMOTE / GIT_BRANCH (fill GIT_PUSH_TOKEN if HTTPS-auth)
 chmod +x secure-bridge/sender/*.sh
-# the background two-way loop (preferred — this is the "autosync" step):
+
+# send one job:
+./secure-bridge/sender/push_job.sh myjob.py
+
+# OR run the two-way loop in a dedicated terminal (watches + pulls):
 bash secure-bridge/sender/autosync.sh
-# or send a job once:
-./secure-bridge/sender/push_job.sh myjob.py   # whole local file only
 ```
 
-Push only whole local files. If you must stage a notebook for a one-off read
-outbound (never in a job), use `git add` explicitly AFTER running the PHI scan
-on it — the listener never does this automatically. Also copy
-`sender/.env.example` → `.env` and fill in your fine-grained, repo-limited
-read/write PAT; never commit the real one.
+Use a **fine-grained PAT scoped read/write to this single repo**. Because the
+listener executes whatever lands in `bridge-inbox/jobs/`, protecting push
+access is how you keep the server safe — anyone who can push can run code on it.
+
+---
+
+## Guards you should not "fix" away
+
+- **`phi_scan.py` fail-closed** — any block pattern refuses the whole outbox
+  push; flagged files are moved to `bridge-state/quarantine/` and an audit
+  line (counts/classes, never raw values) is appended to
+  `bridge-state/phi-audit.jsonl`.
+- **`.gitignore` deny-by-default** for raw data (`*.csv/xlsx/json/parquet`,
+  notebooks, pickles) everywhere **except** `bridge-outbox/`, which is
+  un-ignored because it is scanned before the listener may stage it.
+- **Only `bridge-outbox/` crosses back.** Job stdout/stderr stays in
+  `bridge-state/` logs on the server; transcripts ride the same PHI gate as
+  everything else.
+- **Self-test gate**: `listener.sh` refuses to start if
+  `phi_scan.py --self-test` fails, so a broken scanner can't silently pass
+  data.
+
+These are **best-effort technical controls, not certified DLP/IRM**. Real
+HIPAA/SOC2 attestation still requires vendor DLP, de-identification,
+encryption, IAM, and signed BAAs — outside the scope of this pipeline.
 
 ---
 
 ## Operation
 
-Every step prints a short log to `bridge-state/bridge.log` on the server
-(`--log-file` to change).
-
 - **Send a job:** `push_job.sh jobs/roadsafety/clean_census.py`
 - **Process once:** `listener.sh --once`
-- **Watch loop:** run `listener.sh` (no flag) — default 20s interval, watches
-  `bridge-inbox/jobs/` and `origin`.
-- **Force a full outbound push:** `listener.sh --push-outbox`
-
----
-
-## Replacing the inbox job model with direct repo PRs
-
-The inbox is a thin single-path convenience. Because the listener executes
-whatever arrives in `bridge-inbox/jobs/`, treat that folder like an
-execution sandbox: reviewers must approve anything that lands there. A stricter
-alternative is keeping `bridge-inbox/jobs` read-only to humans and only
-merging PRs to a review branch (see `wake_on_git.py` for a poll-on-git
-variant).
-
----
-
-## Security & compliance notes
-
-- **Raw PHI must never be logged** to stdout/stderr by jobs (it would flow to
-  the outbox logs). Use aggregate values (counts, means, tables without
-  identifiers) and write detailed content only to `bridge-outbox/`.
-- **The `phi_scan.py` gate is now a policy-driven DLP layer**: versioned
-  `receiver/phi_policy.json`, fail-closed blocking (MRN/SSN/DOB/phone/email/
-  insurance/token/secret/notebook patterns), **quarantine** of blocked files
-  under `bridge-state/quarantine/`, and a **PHI-free audit log**
-  (`bridge-state/phi-audit.jsonl`). Self-tests: `phi_scan.py --self-test` and
-  `receiver/phi_scan_test.py`.
-- **It is still not a certified DLP/IRM replacement.** Read `COMPLIANCE.md`:
-  certification (HIPAA/SOC2/HITRUST) requires an external audit, vendor DLP,
-  de-identification, encryption, IAM, and BAAs — this repo provides auditable
-  technical controls + evidence trail, not the certification itself.
-- Anyone with push rights to this repo could push code that the listener will
-  execute on the PHI server. **Protect push access.** For team-wide exposure,
-  strongly prefer a dedicated, access-restricted repo with branch protection
-  and your org's identity-scoped secrets.
-
-### Default secrets to rotate
-| File | Default | Action required |
-|------|---------|-----------------|
-| `sender/.env.example` | `GIT_PUSH_TOKEN` placeholder | Fill with your fine-grained, read/write, repo-limited PAT; never commit the real one |
-
-### Quick security verification
-```bash
-# prove the gate detects PHI and stays clean on aggregates
-python3 secure-bridge/receiver/phi_scan.py --self-test
-python3 secure-bridge/receiver/phi_scan_test.py
-```
+- **Watch loop (internal):** `listener.sh` (default 20s)
+- **Two-way loop (external):** `autosync.sh`
+- **Force a full outbox push:** `listener.sh --push-outbox`
+- **Manual PHI scan:** `python3 secure-bridge/receiver/phi_scan.py <path>`
+- **Self-test the gate:** `python3 secure-bridge/receiver/phi_scan.py --self-test`
 
 ---
 
 ## Troubleshooting
 
-- **`git pull` says already up to date but job isn't picked up** — the
-  listener watches `bridge-inbox/jobs/`; confirm the file landed there in the
-  server clone: `ls -la secure-bridge/bridge-inbox/jobs/`.
-- **Outgoing files blocked** — run `phi_scan.py` on the file manually to see
-  why: `python3 secure-bridge/receiver/phi_scan.py bridge-outbox/chart.png`.
-- **Listener stopped** — check `logs` in `bridge-state/`; on JupyterHub, a
-  running terminal tab is only alive while the server is up.
+- **Job landed but never ran** — confirm the file is in the server clone:
+  `ls -la secure-bridge/bridge-inbox/jobs/`
+- **Outbox file blocked** — scan it manually to see why:
+  `python3 secure-bridge/receiver/phi_scan.py bridge-outbox/<file>`
+- **Listener stopped after a restart** — re-run `--daemon`, or schedule
+  `--once` on a login hook/cron.
+- **Push conflict on your machine** — `autosync.sh` rebases and retries
+  automatically; if it gave up, run `push_job.sh <jobname>.py` once.
+- **Check server logs** — `secure-bridge/bridge-state/bridge.log`.

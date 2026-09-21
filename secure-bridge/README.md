@@ -220,6 +220,54 @@ independent tunnel:
 
 ---
 
+## Working in plain language (the AI writes the code, the bridge runs it)
+
+You never write the moving parts by hand. You talk to an AI assistant on the
+**external** side (GitHub Copilot, Cursor, or any harness), it writes the job,
+and the pipeline ships it. The pattern is always two steps:
+
+### Typical conversation 1 — "see the data layout first"
+> You: *"Probe the patients file in the secure folder and show me its schema."*
+
+The AI writes a probe job (see `template/job_template.py`, Phase 0) that reads
+the file **on the server** and returns only its skeleton. It comes back as
+`data_schema.md`:
+
+```text
+# Data schema
+- Source path (server): /secure_workspace/data/patients.json
+- Rows: 1042
+- Columns (7):
+  - patient_id, age, sex, arm, bp_sys, bp_dia, enrolled_date
+```
+
+No row values, no identifiers — just the layout you need to write the analysis.
+
+### Typical conversation 2 — "run a criteria-based analysis"
+> You: *"Cohort = arm B, age ≥ 50; mean systolic BP by sex. Send me the error if anything fails."*
+
+The AI writes a `run_main()` that loads the file at that server path, filters
+to your criteria, computes the aggregate, and saves results to an **internal**
+path (e.g. `bridge-state/results/`, never the outbox).
+
+- ✅ Success → results stay inside for you to view on the server.
+- ⚠️ Error (wrong column, typo, missing key) → the full traceback returns to
+  you in `<jobname>.error.txt`, so you refine your words and re-push.
+
+### The division of labour
+| Task | Who does it |
+|---|---|
+| Your natural language → working `.py` | The AI assistant (external) |
+| Move the `.py` in; move schema + errors back | The pipeline (sender + receiver) |
+| Execute against the private data on the server | The secure listener (`runner.py`) |
+| Keep raw values from propagating | The pipeline (schema-only + error-only outbox, PHI gate) |
+
+**Tip:** phrase your request as *"show me the schema"* first, then one
+*"table/chart for [cohort criteria]"* request at a time. That keeps each job
+small, obvious, and easy to fix from the error log.
+
+---
+
 ## Operation
 
 - **Send a job:** `push_job.sh jobs/roadsafety/clean_census.py`

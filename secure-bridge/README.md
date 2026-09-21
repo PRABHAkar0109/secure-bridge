@@ -3,19 +3,39 @@
 A lightweight, headless pipeline: you author **plain Python scripts** outside a
 locked-down, PHI-protected environment (with any AI assistant or harness),
 push them to a shared repo, and a listener on the secure server pulls +
-executes them against the live data — pushing **only scanned, aggregated
-outputs** back out.
+executes them against the live data.
+
+**What crosses back is intentionally minimal — schema and errors, not values:**
+- **Outward (internal → you):** a **data skeleton** (`data_schema.md` — file
+  path, row counts, column/field names, dtypes) and **error logs**
+  (`<job>.error.txt` — tracebacks), both PHI-scanned.
+- **Stays internal:** the actual analysis values/results/charts. You see them
+  on the server; raw data and results never leak outward.
 
 > **The two rules that keep this compliant:**
 > - **In-bound** — only plain `.py` code crosses in. Never notebooks: notebooks
 >   silently embed rendered PHI (dataframes, tracebacks, plots) in hidden
 >   metadata.
-> - **Out-bound** — only files under `bridge-outbox/` cross back out, and only
->   after passing `receiver/phi_scan.py`, which blocks raw identifiers
->   (MRN/SSN/DOB/phone/email/name/address/secret patterns). Raw data never
->   leaves the server.
+> - **Out-bound** — only `data_schema.md` + `*.error.txt` under
+>   `bridge-outbox/` cross back out, and only after passing
+>   `receiver/phi_scan.py`, which blocks raw identifiers
+>   (MRN/SSN/DOB/phone/email/name/address/secret patterns). Analysis values
+>   never leave the server.
 
 ---
+
+## Workflow (schema-first)
+
+1. **Phase 0 — see the data first.** Send a probe job that reads your CSV/JSON
+   on the server and writes **only its skeleton** to `OUTBOX/data_schema.md`
+   (columns/field names, row counts, dtypes, source path). You receive it
+   automatically.
+2. **Phase 1 — push the real analysis.** Based on the schema, push your
+   analysis code. It computes inside the secure workspace. If it raises an
+   error, the full traceback returns to you in `<job>.error.txt` to fix.
+3. **Results stay inside** — view charts/tables on the server, or have the
+   analysis itself write only aggregates to the outbox if you opt in; by
+   default the listener only returns schema + errors.
 
 ## Layout
 
@@ -197,6 +217,54 @@ independent tunnel:
 > Not sure if it's worth running them in parallel? Simpler alternative: run
 > them one after another on the **same** clone/branch — same commands, one
 > pipeline at a time.
+
+---
+
+## Working in plain language (the AI writes the code, the bridge runs it)
+
+You never write the moving parts by hand. You talk to an AI assistant on the
+**external** side (GitHub Copilot, Cursor, or any harness), it writes the job,
+and the pipeline ships it. The pattern is always two steps:
+
+### Typical conversation 1 — "see the data layout first"
+> You: *"Probe the patients file in the secure folder and show me its schema."*
+
+The AI writes a probe job (see `template/job_template.py`, Phase 0) that reads
+the file **on the server** and returns only its skeleton. It comes back as
+`data_schema.md`:
+
+```text
+# Data schema
+- Source path (server): /secure_workspace/data/patients.json
+- Rows: 1042
+- Columns (7):
+  - patient_id, age, sex, arm, bp_sys, bp_dia, enrolled_date
+```
+
+No row values, no identifiers — just the layout you need to write the analysis.
+
+### Typical conversation 2 — "run a criteria-based analysis"
+> You: *"Cohort = arm B, age ≥ 50; mean systolic BP by sex. Send me the error if anything fails."*
+
+The AI writes a `run_main()` that loads the file at that server path, filters
+to your criteria, computes the aggregate, and saves results to an **internal**
+path (e.g. `bridge-state/results/`, never the outbox).
+
+- ✅ Success → results stay inside for you to view on the server.
+- ⚠️ Error (wrong column, typo, missing key) → the full traceback returns to
+  you in `<jobname>.error.txt`, so you refine your words and re-push.
+
+### The division of labour
+| Task | Who does it |
+|---|---|
+| Your natural language → working `.py` | The AI assistant (external) |
+| Move the `.py` in; move schema + errors back | The pipeline (sender + receiver) |
+| Execute against the private data on the server | The secure listener (`runner.py`) |
+| Keep raw values from propagating | The pipeline (schema-only + error-only outbox, PHI gate) |
+
+**Tip:** phrase your request as *"show me the schema"* first, then one
+*"table/chart for [cohort criteria]"* request at a time. That keeps each job
+small, obvious, and easy to fix from the error log.
 
 ---
 
